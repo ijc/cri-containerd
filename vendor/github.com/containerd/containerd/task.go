@@ -18,6 +18,7 @@ import (
 	"github.com/containerd/containerd/linux/runcopts"
 	"github.com/containerd/containerd/mount"
 	"github.com/containerd/containerd/rootfs"
+	"github.com/containerd/containerd/runtime"
 	"github.com/containerd/containerd/typeurl"
 	digest "github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go/v1"
@@ -27,14 +28,14 @@ import (
 
 const UnknownExitStatus = 255
 
-type TaskStatus string
+type Status string
 
 const (
-	Running TaskStatus = "running"
-	Created TaskStatus = "created"
-	Stopped TaskStatus = "stopped"
-	Paused  TaskStatus = "paused"
-	Pausing TaskStatus = "pausing"
+	Running Status = "running"
+	Created Status = "created"
+	Stopped Status = "stopped"
+	Paused  Status = "paused"
+	Pausing Status = "pausing"
 )
 
 type IOCloseInfo struct {
@@ -67,7 +68,7 @@ type Task interface {
 	Pause(context.Context) error
 	Resume(context.Context) error
 	Start(context.Context) error
-	Status(context.Context) (TaskStatus, error)
+	Status(context.Context) (Status, error)
 	Wait(context.Context) (uint32, error)
 	Exec(context.Context, string, *specs.Process, IOCreation) (Process, error)
 	Pids(context.Context) ([]uint32, error)
@@ -76,17 +77,6 @@ type Task interface {
 	IO() *IO
 	Checkpoint(context.Context, ...CheckpointTaskOpts) (v1.Descriptor, error)
 	Update(context.Context, ...UpdateTaskOpts) error
-}
-
-type Process interface {
-	Pid() uint32
-	Start(context.Context) error
-	Delete(context.Context) (uint32, error)
-	Kill(context.Context, syscall.Signal) error
-	Wait(context.Context) (uint32, error)
-	CloseIO(context.Context, ...IOCloserOpts) error
-	Resize(ctx context.Context, w, h uint32) error
-	IO() *IO
 }
 
 var _ = (Task)(&task{})
@@ -117,7 +107,7 @@ func (t *task) Start(ctx context.Context) error {
 		t.pid = response.Pid
 		return nil
 	}
-	_, err := t.client.TaskService().Start(ctx, &tasks.StartTaskRequest{
+	_, err := t.client.TaskService().Start(ctx, &tasks.StartRequest{
 		ContainerID: t.id,
 	})
 	if err != nil {
@@ -151,21 +141,27 @@ func (t *task) Resume(ctx context.Context) error {
 	return errdefs.FromGRPC(err)
 }
 
-func (t *task) Status(ctx context.Context) (TaskStatus, error) {
-	r, err := t.client.TaskService().Get(ctx, &tasks.GetTaskRequest{
+func (t *task) Status(ctx context.Context) (Status, error) {
+	r, err := t.client.TaskService().Get(ctx, &tasks.GetRequest{
 		ContainerID: t.id,
 	})
 	if err != nil {
 		return "", errdefs.FromGRPC(err)
 	}
-	return TaskStatus(strings.ToLower(r.Task.Status.String())), nil
+	return Status(strings.ToLower(r.Process.Status.String())), nil
 }
 
 // Wait is a blocking call that will wait for the task to exit and return the exit status
 func (t *task) Wait(ctx context.Context) (uint32, error) {
-	eventstream, err := t.client.EventService().Subscribe(ctx, &eventsapi.SubscribeRequest{})
+	eventstream, err := t.client.EventService().Subscribe(ctx, &eventsapi.SubscribeRequest{
+		Filters: []string{"topic==" + runtime.TaskExitEventTopic},
+	})
 	if err != nil {
 		return UnknownExitStatus, errdefs.FromGRPC(err)
+	}
+	// first check if the task has exited
+	if status, _ := t.Status(ctx); status == Stopped {
+		return UnknownExitStatus, errdefs.ErrUnavailable
 	}
 	for {
 		evt, err := eventstream.Recv()
@@ -209,6 +205,25 @@ func (t *task) Exec(ctx context.Context, id string, spec *specs.Process, ioCreat
 	}
 	i, err := ioCreate(id)
 	if err != nil {
+		return nil, err
+	}
+	any, err := typeurl.MarshalAny(spec)
+	if err != nil {
+		return nil, err
+	}
+	request := &tasks.ExecProcessRequest{
+		ContainerID: t.id,
+		ExecID:      id,
+		Terminal:    i.Terminal,
+		Stdin:       i.Stdin,
+		Stdout:      i.Stdout,
+		Stderr:      i.Stderr,
+		Spec:        any,
+	}
+	if _, err := t.client.TaskService().Exec(ctx, request); err != nil {
+		i.Cancel()
+		i.Wait()
+		i.Close()
 		return nil, err
 	}
 	return &process{
