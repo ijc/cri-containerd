@@ -47,7 +47,7 @@ func (c *criContainerdService) PodSandboxStatus(ctx context.Context, r *runtime.
 	// Use the full sandbox id.
 	id := sandbox.ID
 
-	info, err := c.taskService.Get(ctx, &tasks.GetTaskRequest{ContainerID: id})
+	info, err := c.taskService.Get(ctx, &tasks.GetRequest{ContainerID: id})
 	if err != nil && !isContainerdGRPCNotFoundError(err) {
 		return nil, fmt.Errorf("failed to get sandbox container info for %q: %v", id, err)
 	}
@@ -55,7 +55,7 @@ func (c *criContainerdService) PodSandboxStatus(ctx context.Context, r *runtime.
 	// Set sandbox state to NOTREADY by default.
 	state := runtime.PodSandboxState_SANDBOX_NOTREADY
 	// If the sandbox container is running, treat it as READY.
-	if info != nil && info.Task.Status == task.StatusRunning {
+	if info != nil && info.Process.Status == task.StatusRunning {
 		state = runtime.PodSandboxState_SANDBOX_READY
 	}
 

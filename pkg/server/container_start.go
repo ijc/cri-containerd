@@ -97,13 +97,13 @@ func (c *criContainerdService) startContainer(ctx context.Context, id string, me
 	sandboxConfig := sandbox.Config
 	sandboxID := meta.SandboxID
 	// Make sure sandbox is running.
-	sandboxInfo, err := c.taskService.Get(ctx, &tasks.GetTaskRequest{ContainerID: sandboxID})
+	sandboxInfo, err := c.taskService.Get(ctx, &tasks.GetRequest{ContainerID: sandboxID})
 	if err != nil {
 		return fmt.Errorf("failed to get sandbox container %q info: %v", sandboxID, err)
 	}
 	// This is only a best effort check, sandbox may still exit after this. If sandbox fails
 	// before starting the container, the start will fail.
-	if sandboxInfo.Task.Status != task.StatusRunning {
+	if sandboxInfo.Process.Status != task.StatusRunning {
 		return fmt.Errorf("sandbox container %q is not running", sandboxID)
 	}
 
@@ -187,7 +187,7 @@ func (c *criContainerdService) startContainer(ctx context.Context, id string, me
 	}()
 
 	// Start containerd task.
-	if _, err := c.taskService.Start(ctx, &tasks.StartTaskRequest{ContainerID: id}); err != nil {
+	if _, err := c.taskService.Start(ctx, &tasks.StartRequest{ContainerID: id}); err != nil {
 		return fmt.Errorf("failed to start containerd task %q: %v", id, err)
 	}
 

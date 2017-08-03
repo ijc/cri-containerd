@@ -50,7 +50,7 @@ func (c *criContainerdService) ListPodSandbox(ctx context.Context, r *runtime.Li
 
 	var sandboxes []*runtime.PodSandbox
 	for _, sandboxInStore := range sandboxesInStore {
-		var sandboxInContainerd *task.Task
+		var sandboxInContainerd *task.Process
 		for _, s := range sandboxesInContainerd {
 			if s.ID == sandboxInStore.ID {
 				sandboxInContainerd = s

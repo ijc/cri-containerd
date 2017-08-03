@@ -54,7 +54,7 @@ func (c *criContainerdService) RemovePodSandbox(ctx context.Context, r *runtime.
 
 	// Return error if sandbox container is not fully stopped.
 	// TODO(random-liu): [P0] Make sure network is torn down, may need to introduce a state.
-	_, err = c.taskService.Get(ctx, &tasks.GetTaskRequest{ContainerID: id})
+	_, err = c.taskService.Get(ctx, &tasks.GetRequest{ContainerID: id})
 	if err != nil && !isContainerdGRPCNotFoundError(err) {
 		return nil, fmt.Errorf("failed to get sandbox container info for %q: %v", id, err)
 	}

@@ -98,14 +98,14 @@ func (c *criContainerdService) stopSandboxContainer(ctx context.Context, id stri
 	}
 	defer cancel()
 
-	resp, err := c.taskService.Get(ctx, &tasks.GetTaskRequest{ContainerID: id})
+	resp, err := c.taskService.Get(ctx, &tasks.GetRequest{ContainerID: id})
 	if err != nil {
 		if isContainerdGRPCNotFoundError(err) {
 			return nil
 		}
 		return fmt.Errorf("failed to get sandbox container: %v", err)
 	}
-	if resp.Task.Status != task.StatusStopped {
+	if resp.Process.Status != task.StatusStopped {
 		// TODO(random-liu): [P1] Handle sandbox container graceful deletion.
 		if _, err := c.taskService.Kill(ctx, &tasks.KillRequest{
 			ContainerID: id,
@@ -115,7 +115,7 @@ func (c *criContainerdService) stopSandboxContainer(ctx context.Context, id stri
 			return fmt.Errorf("failed to kill sandbox container: %v", err)
 		}
 
-		if err := c.waitSandboxContainer(eventstream, id, resp.Task.Pid); err != nil {
+		if err := c.waitSandboxContainer(eventstream, id, resp.Process.Pid); err != nil {
 			return fmt.Errorf("failed to wait for pod sandbox to stop: %v", err)
 		}
 	}

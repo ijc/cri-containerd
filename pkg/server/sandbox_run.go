@@ -224,7 +224,7 @@ func (c *criContainerdService) RunPodSandbox(ctx context.Context, r *runtime.Run
 	}
 
 	// Start sandbox container in containerd.
-	if _, err := c.taskService.Start(ctx, &tasks.StartTaskRequest{ContainerID: id}); err != nil {
+	if _, err := c.taskService.Start(ctx, &tasks.StartRequest{ContainerID: id}); err != nil {
 		return nil, fmt.Errorf("failed to start sandbox container %q: %v",
 			id, err)
 	}
